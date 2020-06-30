@@ -2,3 +2,7 @@ baseURL = "https://zryfish.github.io/"
 languageCode = "zh-cn"
 title = "Jeff's blog"
 theme = "fuji"
+
+[taxonomies]
+  category = "categories"
+  tag = "tags"

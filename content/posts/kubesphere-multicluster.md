@@ -12,6 +12,8 @@ abstract: ddddd
 - **高可用**  
 可以将业务负载分布在多个集群上，使用一个全局的VIP或者DNS域名将请求发送到对应的后端集群，当一个集群发生故障无法处理请求时，将VIP或者DNS记录切换健康的集群。
 
+![High Availability](../images/ha.png)
+
 - **低延迟**  
 在多个区域部署集群，将用户请求转向距离最近的集群处理，以此来最大限度减少网络带来的延迟。举个例子，假如在北京，上海，广州三地部署了三个K8s集群，对于广东的用户就将请求转发到所在广州的集群处理，这样可以减少地理距离带来的网络延迟，最大限度地实现各地一致的用户体验。
 
@@ -20,6 +22,8 @@ abstract: ddddd
 
 - **业务隔离**  
 虽然 Kubernetes 里提供了 namespace 来做应用的隔离，但是这只是逻辑上的隔离，不同 namespace 之间网络互通，而且还是存在资源抢占的问题。要想实现更进一步的隔离需要额外设置诸如网络隔离策略，资源限额等。多集群可以在物理上实现彻底隔离，安全性和可靠性相比使用 namespace 隔离更高。例如企业内部不同部门部署各自独立的集群、使用多个集群来分别部署开发/测试/生成环境等。
+
+![Pipeline](../images/pipeline.png)
 
 - **避免厂商锁定**  
 Kubernetes 已经成容器编排领域的事实标准，在不同云服务商上部署集群避免将鸡蛋都放在一个篮子里，可以随时迁移业务，在不同集群间伸缩。缺点是成本增加，考虑到不同厂商提供的K8s服务对应的存储、网络接口有差异，业务迁移也不是轻而易举。
@@ -136,23 +140,44 @@ Kubefed目前也存在一些值得关注的问题,
 
 ## KubeSphere 多集群
 
-上面提到的 Federation 是社区提出的解决多集群部署问题的方案，可以通过将资源联邦化来实现多集群的部署。对于很多用户来说，多集群的联合部署其实并不是刚需，更需要的在一处能够同时管理多个集群的资源即可。KubeSphere v3.0 支持了多集群管理的功能，实现了资源独立管理和联邦部署的功能。KubeSphere 多集群参考了社区的 Federation 方案，在 Federation 的基础上实现了管理多个集群的功能。
+上面提到的 Federation 是社区提出的解决多集群部署问题的方案，可以通过将资源联邦化来实现多集群的部署。对于很多用户来说，多集群的联合部署其实并不是刚需，更需要的在一处能够同时管理多个集群的资源即可。KubeSphere v3.0 支持了多集群管理的功能，实现了资源独立管理和联邦部署的功能。
 
-<!-- ks 多集群架构图 -->
+### 架构
+![KubeSphere MultiCluster Architecture](../images/architecture.jpg)
 
-这里有几点值得注意：
-- KubeSphere 的管理集群 Host Cluster 独立于其所管理的成员集群，Member Cluster并不知道 Host Cluster 存在，这点和 Federation 的设计思想一致。这样做的好处是当控制平面发生故障时不会影响到成员集群，已经部署的负载仍然可以正常运行，不会受到影响。
-- KubeSphere Host Cluster 实现了对成员集群请求的转发。当用户请求具体成员集群的API时，请求会发往 Host Cluster，由 Host Cluster 进行认证，认证通过后发往具体的成员集群。 Host Cluster同时需要实现各个成员集群用户和权限信息的同步(使用Kubefed同步)，但实际的鉴权工作仍然下放到各个集群中去做。这样的一个思路也是为了实现上面提到的，当 Host Cluster 发生故障时不影响各个集群的正常运行。Host Cluster 是一个资源的协调者，不是一个独裁者。
-- API 层面上，尽可能兼容之前版本的API。在多集群环境下，API请求路径中以 `/apis/clusters/{cluster}` 开头的请求会被转发到 `{cluster}` 集群，并且去除 `/clusters/{cluster}`，这样的好处对应的集群收到请求和其它的请求并无任何区别，无需做额外的工作。举个例子：
+KubeSphere多集群的整体架构图如图所示，多集群控制平面所在的集群称之为 Host 集群，其管理的集群称为 Member 集群，本质上是一个安装了 KubeSphere 的 Kubernetes 集群，Host 集群需要能够访问 Member 集群的 kube-apiserver ，Member 集群之间的网络连通性没有要求。管理集群 Host Cluster 独立于其所管理的成员集群，Member Cluster 并不知道 Host Cluster 存在，这样做的好处是当控制平面发生故障时不会影响到成员集群，已经部署的负载仍然可以正常运行，不会受到影响。
+
+Host 集群同时承担着 API 入口的作用，由 Host Cluster 将对 Member 集群的资源请求转发到 Member 集群，这样做的目的是方便聚合，而且也利于做统一的权限认证。
+
+### 认证鉴权
+
+从架构图上可以看出，Host 集群负责同步集群间的身份和权限信息，这是通过 Kubefed 的联邦资源实现的，Host 集群上创建 FederatedUser/FederatedRole/FederatedRoleBinding ，Kubefed 会将 User/Role/Rolebinding 推送到 Member 集群。涉及到权限的改动只会应用到 Host 集群，然后再同步到 Member 集群。这样做的目的是为了保持每个 Member 集群的本身的完整性，Member 集群上保存身份和权限数据使得集群本身可以独立的进行鉴权和授权，不依赖 Host 集群。在 KubeSphere 多集群架构中，Host 集群的角色是一个资源的协调者，而不是一个独裁者，尽可能地将权力下放给 Member 集群。
+
+### 集群连通性
+
+KubeSphere 多集群中只要求 Host 集群能够访问 Member 集群的 Kubernetes APIServer ，对于集群层面的网络连通性没有要求。 KubeSphere 中对于 Host 和 Member 集群的连接提供了两种方式:
+
+- **直接连接** 如果 Member 集群的 kube-apiserver 地址可以在 Host 集群上的任一节点都能连通，那么即可以使用这种直接连接的方式， Member 集群只需提供集群的 kubeconfig 即可。这种方式适用于大多数的公有云 K8s 服务，或者 Host 集群和 Member 集群在同一网络的情形。
+
+- **代理连接** 如果 Member 集群在私有网络中，无法暴露 kube-apiserver 地址， KubeSphere 提供了一种代理的方式，即 [Tower](https://github.com/kubesphere/tower)(https://github.com/kubesphere/tower)。具体来说 Host 集群上会运行一个代理服务，当有新集群需要加入时，Host 集群会生成加入所有的凭证信息，Member 集群上运行 Agent 会去连接 Host 集群的代理服务，连接成功后建立一个反向代理隧道。由于 Member 集群的 kube-apiserver 地址在代理连接下会发生变化，需要 Host 集群为 Member 集群生成一个新的 Kubeconfig 。这样的好处是可以屏蔽底层细节，对于控制平面来说无论是直接连接还是代理方式连接，呈现给控制平面的都是一个可以直接使用的 Kubeconfig 。
+
+![Cluster Tunnel](../images/tunnel.jpg)
+
+### API转发
+
+KubeSphere 多集群架构中，Host 集群承担着集群入口的职责，所有的用户请求 API 是直接发往 Host 集群，再由 Host 集群决定请求发往何处。为了尽可能兼容之前的 API，在多集群环境下，API请求路径中以 `/apis/clusters/{cluster}` 开头的请求会被转发到 `{cluster}` 集群，并且去除 `/clusters/{cluster}`，这样的好处对应的集群收到请求和其它的请求并无任何区别，无需做额外的工作。举个例子：
   ```
-  GET /api/clusters/gondor/v1/namespaces/default
-  GET /kapis/clusters/gondor/servicemesh.kubesphere.io/v1alpha1/namespaces/default/strategies/canary
+  GET /api/clusters/rohan/v1/namespaces/default
+  GET /kapis/clusters/rohan/servicemesh.kubesphere.io/v1alpha1/namespaces/default/strategies/canary
   ```
-  会被转发到名称为 gondor 的集群，并且请求会被处理为 
+  会被转发到名称为 rohan 的集群，并且请求会被处理为 
   ```
   GET /api/v1/namespaces/default
   GET /kapis/servicemesh.kubesphere.io/v1alpha1/namespaces/default/strategies/canary
   ```
+
+![API](../images/api.jpg)
+
 
 <!-- 多集群demo视频 -->
 
