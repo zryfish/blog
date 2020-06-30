@@ -148,7 +148,7 @@ Kubefed目前也存在一些值得关注的问题,
 
 上面提到的 Federation 是社区提出的解决多集群部署问题的方案，可以通过将资源联邦化来实现多集群的部署。对于很多企业用户来说，多集群的联合部署其实并不是刚需，更需要的在一处能够同时管理多个集群的资源即可。
 
-KubeSphere v3.0 支持了多集群管理的功能，实现了资源独立管理和联邦部署的功能，能够帮助用户将应用跨多个不同的基础设施，一键统一分发至多个 Kubernetes 集群，并且支持对集群与应用等不同维度的资源实现监控、日志、事件与审计的查询，以及多渠道的告警通知，并结合 CI/CD 流水线部署应用至多个集群中，轻松应对灾备多活等场景。
+我们开源的 KubeSphere v3.0 (https://github.com/kubesphere) 支持了多集群管理的功能，实现了资源独立管理和联邦部署的功能，能够帮助用户将应用跨多个不同的基础设施，一键统一分发至多个 Kubernetes 集群，并且支持对集群与应用等不同维度的资源实现监控、日志、事件与审计的查询，以及多渠道的告警通知，并结合 CI/CD 流水线部署应用至多个集群中，轻松应对灾备多活等场景。
 
 ![](https://pek3b.qingstor.com/kubesphere-docs/png/20200630184750.png)
 
@@ -161,7 +161,7 @@ KubeSphere 3.0 基于 Kubefed、RBAC 和 Open Policy Agent 实现了面向多集
 
 ## 架构
 
-![](https://pek3b.qingstor.com/kubesphere-docs/png/20200630183055.png)
+![](https://pek3b.qingstor.com/kubesphere-docs/png/20200630193512.png)
 
 KubeSphere (https://kubesphere.com.cn/) 多集群的整体架构图如图所示，多集群控制平面所在的集群称之为 Host 集群，其管理的集群称为 Member 集群，本质上是一个安装了 KubeSphere 的 Kubernetes 集群，Host 集群需要能够访问 Member 集群的 kube-apiserver ，Member 集群之间的网络连通性没有要求。管理集群 Host Cluster 独立于其所管理的成员集群，Member Cluster 并不知道 Host Cluster 存在，这样做的好处是当控制平面发生故障时不会影响到成员集群，已经部署的负载仍然可以正常运行，不会受到影响。
 
@@ -177,18 +177,24 @@ KubeSphere 多集群中只要求 Host 集群能够访问 Member 集群的 Kubern
 
 - **直接连接** 如果 Member 集群的 kube-apiserver 地址可以在 Host 集群上的任一节点都能连通，那么即可以使用这种直接连接的方式， Member 集群只需提供集群的 kubeconfig 即可。这种方式适用于大多数的公有云 K8s 服务，或者 Host 集群和 Member 集群在同一网络的情形。
 
-- **代理连接** 如果 Member 集群在私有网络中，无法暴露 kube-apiserver 地址， KubeSphere 提供了一种代理的方式，即 [Tower](https://github.com/kubesphere/tower)(https://github.com/kubesphere/tower)。具体来说 Host 集群上会运行一个代理服务，当有新集群需要加入时，Host 集群会生成加入所有的凭证信息，Member 集群上运行 Agent 会去连接 Host 集群的代理服务，连接成功后建立一个反向代理隧道。由于 Member 集群的 kube-apiserver 地址在代理连接下会发生变化，需要 Host 集群为 Member 集群生成一个新的 Kubeconfig 。这样的好处是可以屏蔽底层细节，对于控制平面来说无论是直接连接还是代理方式连接，呈现给控制平面的都是一个可以直接使用的 Kubeconfig 。
+- **代理连接** 如果 Member 集群在私有网络中，无法暴露 kube-apiserver 地址， KubeSphere 提供了一种代理的方式，即 [Tower](https://github.com/kubesphere/tower)(https://github.com/kubesphere/tower)。 具体来说 Host 集群上会运行一个代理服务，当有新集群需要加入时，Host 集群会生成加入所有的凭证信息，Member 集群上运行 Agent 会去连接 Host 集群的代理服务，连接成功后建立一个反向代理隧道。由于 Member 集群的 kube-apiserver 地址在代理连接下会发生变化，需要 Host 集群为 Member 集群生成一个新的 Kubeconfig 。这样的好处是可以屏蔽底层细节，对于控制平面来说无论是直接连接还是代理方式连接，呈现给控制平面的都是一个可以直接使用的 Kubeconfig 。
 
 ![Cluster Tunnel](../images/tunnel.jpg)
 
 ## API 转发
 
 KubeSphere 多集群架构中，Host 集群承担着集群入口的职责，所有的用户请求 API 是直接发往 Host 集群，再由 Host 集群决定请求发往何处。为了尽可能兼容之前的 API，在多集群环境下，API请求路径中以 `/apis/clusters/{cluster}` 开头的请求会被转发到 `{cluster}` 集群，并且去除 `/clusters/{cluster}`，这样的好处对应的集群收到请求和其它的请求并无任何区别，无需做额外的工作。举个例子：
+
+![](https://pek3b.qingstor.com/kubesphere-docs/png/20200630193153.png)
+
   ```
   GET /api/clusters/rohan/v1/namespaces/default
   GET /kapis/clusters/rohan/servicemesh.kubesphere.io/v1alpha1/namespaces/default/strategies/canary
   ```
   会被转发到名称为 rohan 的集群，并且请求会被处理为
+
+  ![](https://pek3b.qingstor.com/kubesphere-docs/png/20200630193222.png)
+
   ```
   GET /api/v1/namespaces/default
   GET /kapis/servicemesh.kubesphere.io/v1alpha1/namespaces/default/strategies/canary
