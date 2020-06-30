@@ -148,7 +148,7 @@ Kubefed目前也存在一些值得关注的问题,
 
 上面提到的 Federation 是社区提出的解决多集群部署问题的方案，可以通过将资源联邦化来实现多集群的部署。对于很多企业用户来说，多集群的联合部署其实并不是刚需，更需要的在一处能够同时管理多个集群的资源即可。
 
-我们开源的 KubeSphere v3.0 (https://github.com/kubesphere) 支持了多集群管理的功能，实现了资源独立管理和联邦部署的功能，能够帮助用户将应用跨多个不同的基础设施，一键统一分发至多个 Kubernetes 集群，并且支持对集群与应用等不同维度的资源实现监控、日志、事件与审计的查询，以及多渠道的告警通知，并结合 CI/CD 流水线部署应用至多个集群中，轻松应对灾备多活等场景。
+我们开源的 KubeSphere v3.0 (https://github.com/kubesphere) 支持了多集群管理的功能，实现了资源独立管理和联邦部署的功能，支持对集群与应用等不同维度的资源实现监控、日志、事件与审计的查询，以及多渠道的告警通知，以及可以结合 CI/CD 流水线部署应用至多个集群中。
 
 ![](https://pek3b.qingstor.com/kubesphere-docs/png/20200630184750.png)
 
@@ -214,3 +214,4 @@ KubeSphere 多集群架构中，Host 集群承担着集群入口的职责，所�
 2. KubeSphere 官网 https://kubesphere.com.cn/
 3. Kubernetes Federation Evolution https://kubernetes.io/blog/2018/12/12/kubernetes-federation-evolution/
 4. KubeSphere GitHub https://github.com/kubesphere
+5. Kubernetes 多集群细粒度的基础资源管理 https://www.bilibili.com/video/BV1Np4y1S7Lu/
